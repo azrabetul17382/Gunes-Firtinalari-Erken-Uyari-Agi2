@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Güneş Fırtınası Erken Uyarı</title>
+  <meta name="description" content="NOAA verilerine dayalı 3 günlük güneş fırtınası tahmini." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;900&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0..1&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg: #060b18;
+      --s1: #0b1228;
+      --s2: #111a35;
+      --border: rgba(255, 255, 255, 0.07);
+      --text: #dde3ff;
+      --muted: #8990b8;
+      --green: #5dffa0;
+      --yellow: #fbbf24;
+      --orange: #fb923c;
+      --coral: #f87171;
+      --red: #ef4444;
+      --purple: #a78bfa;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes pulseGlow {
+
+      0%,
+      100% {
+        box-shadow: 0 0 20px -5px currentColor;
+      }
+
+      50% {
+        box-shadow: 0 0 40px 5px currentColor;
+      }
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .3
+      }
+    }
+
+    /* ── Base / Layout ── */
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding-bottom: 80px;
+      overflow-x: hidden;
+    }
+
+    .card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .01));
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      backdrop-filter: blur(12px);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+      animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.5);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .stitle {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 1rem
+    }
+
+    .stag {
+      font-size: .68rem;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px
+    }
+
+    .mini-stat {
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .mini-stat:hover {
+      background: rgba(255, 255, 255, .07);
+      transform: scale(1.02);
+    }
+
+    .day-card {
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 10px;
+      text-align: center;
+      transition: all .4s cubic-bezier(0.16, 1, 0.3, 1)
+    }
+
+    .day-card:hover {
+      background: rgba(255, 255, 255, .06);
+      transform: translateY(-5px);
+    }
+
+    .threat-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .4s ease;
+      flex-shrink: 0
+    }
+
+    .gauge {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      border: 4px solid rgba(255, 255, 255, .08);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: all .5s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: pulseGlow 3s infinite;
+    }
+
+    .alert-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border-radius: 999px;
+      padding: 8px 20px;
+      border: 2px solid;
+      transition: all .4s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 15px -5px currentColor;
+    }
+
+    /* ── Header & Tab bar ── */
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+      background: rgba(6, 11, 24, .9);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      transition: all 0.3s ease;
+    }
+
+    .tab-bar {
+      position: fixed;
+      top: 57px;
+      left: 0;
+      right: 0;
+      z-index: 49;
+      display: flex;
+      padding: 10px 20px;
+      gap: 8px;
+      background: rgba(6, 11, 24, .85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border)
+    }
+
+    .tab-btn {
+      flex: 1;
+      max-width: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 9px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: .82rem;
+      cursor: pointer;
+      transition: all .3s cubic-bezier(0.4, 0, 0.2, 1);
+      outline: none;
+    }
+
+    .tab-btn:hover:not(.active) {
+      background: rgba(255, 255, 255, .05);
+      transform: translateY(-1px);
+    }
+
+    .tab-btn.active {
+      background: rgba(93, 255, 160, .12);
+      border-color: rgba(93, 255, 160, .35);
+      color: var(--green);
+      box-shadow: 0 4px 15px -5px rgba(93, 255, 160, 0.3);
+    }
+
+    .tab-btn:active {
+      transform: scale(0.97);
+    }
+
+    .tab-btn .material-symbols-outlined {
+      font-size: 18px
+    }
+
+    /* ── Tab content ── */
+    .tab-content {
+      display: none;
+      opacity: 0;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* ── Main & Grid ── */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 120px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px
+    }
+
+    .fc-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px
+    }
+
+    @media(max-width:600px) {
+      .fc-grid {
+        grid-template-columns: 1fr
+      }
+
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ── Slider ── */
+    input[type=range] {
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.05);
+      outline: none;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    input[type=range]:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 15px var(--green);
+      cursor: grab;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    input[type=range]::-webkit-slider-thumb:active {
+      cursor: grabbing;
+      transform: scale(1.2);
+    }
+
+    /* ── Live dot ── */
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #4ade80;
+      display: inline-block;
+      animation: blink 1.4s ease-in-out infinite
+    }
+
+
+    /* ── G level badge ── */
+    .g-badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: .85rem
+    }
+
+    /* ── Sim severity bar ── */
+    .sev-bar {
+      height: 8px;
+      border-radius: 4px;
+      transition: width .5s ease, background .5s ease
+    }
+
+    /* ── Material icons ── */
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      user-select: none
+    }
+
+    /* ── Aurora Animation ── */
+    .earth-container {
+      position: relative;
+      width: 280px;
+      height: 280px;
+      margin: 0 auto;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #1e3a8a, #0f172a 70%);
+      box-shadow: inset -20px -20px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .earth-grid {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: 20px 20px;
+      border-radius: 50%;
+      opacity: 0.3;
+    }
+
+    .pole-mark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: white;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 5px white;
+    }
+
+    .aurora-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 4px solid var(--green);
+      filter: blur(6px) drop-shadow(0 0 10px var(--green));
+      opacity: 0.7;
+      transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: auroraWobble 4s infinite alternate ease-in-out;
+    }
+
+    .aurora-glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(transparent 30%, rgba(93, 255, 160, 0.4) 60%, transparent 80%);
+      transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      filter: blur(12px);
+      animation: auroraWobble 5s infinite alternate-reverse ease-in-out;
+    }
+
+    @keyframes auroraWobble {
+      0% {
+        transform: translate(-50%, -50%) scale(0.95) rotate(0deg);
+      }
+
+      50% {
+        transform: translate(-52%, -48%) scale(1.02) rotate(3deg);
+      }
+
+      100% {
+        transform: translate(-48%, -51%) scale(0.98) rotate(-2deg);
+      }
+    }
+
+    /* ── Sun Animation ── */
+    .sun-container {
+      position: relative;
+      width: 280px;
+      height: 280px;
+      margin: 0 auto;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 40%, #fff9c4, #ffb300 40%, #e65100 80%, #bf360c);
+      box-shadow: 0 0 40px #ff9800, inset -30px -30px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      animation: pulseSun 3s infinite alternate ease-in-out;
+    }
+
+    .sun-surface {
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      background:
+        radial-gradient(circle at 50% 50%, transparent 40%, rgba(255, 255, 255, 0.15) 45%, transparent 50%),
+        repeating-linear-gradient(45deg, transparent, transparent 15px, rgba(230, 81, 0, 0.15) 15px, rgba(230, 81, 0, 0.15) 30px);
+      animation: rotateSun 80s linear infinite;
+      opacity: 0.6;
+    }
+
+    .sunspot {
+      position: absolute;
+      border-radius: 50%;
+      background: radial-gradient(circle at center, #111 20%, #444 50%, rgba(191, 54, 12, 0.8) 80%);
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: scale(0);
+      opacity: 0;
+    }
+
+    @keyframes rotateSun {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes pulseSun {
+      from {
+        box-shadow: 0 0 50px #ff9800, inset -20px -20px 40px rgba(0, 0, 0, 0.5);
+      }
+
+      to {
+        box-shadow: 0 0 70px #ff5722, inset -10px -10px 30px rgba(0, 0, 0, 0.4);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ── Header ────────────────────────────────────────────────── -->
+  <header>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="material-symbols-outlined" style="color:var(--green);font-size:22px">flare</span>
+      <span style="font-family:'Space Grotesk';font-weight:700;font-size:1rem;color:var(--green)">Güneş
+        Gözlemcisi</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:7px;font-size:.72rem;color:var(--muted)">
+      <span class="live-dot"></span>
+      <span id="updated-text">Yükleniyor…</span>
+    </div>
+  </header>
+
+  <!-- ── Tab Bar ───────────────────────────────────────────────── -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="btn-live" onclick="switchTab('live')">
+      <span class="material-symbols-outlined">monitoring</span>
+      Canlı Veri &amp; Tahmin
+    </button>
+    <button class="tab-btn" id="btn-sim" onclick="switchTab('sim')">
+      <span class="material-symbols-outlined">science</span>
+      Simülasyon
+    </button>
+    <button class="tab-btn" id="btn-aurora" onclick="switchTab('aurora')">
+      <span class="material-symbols-outlined">lens_blur</span>
+      Aurora Ovali
+    </button>
+    <button class="tab-btn" id="btn-sun" onclick="switchTab('sun')">
+      <span class="material-symbols-outlined">light_mode</span>
+      Güneş Lekeleri
+    </button>
+    <button class="tab-btn" id="btn-info" onclick="switchTab('info')">
+      <span class="material-symbols-outlined">menu_book</span>
+      Bilgi Bankası
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!--  TAB 1 – Canlı Veri & Tahmin                              -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <main>
+    <div class="tab-content active" id="tab-live">
+
+      <!-- Hero: Gauge + Stats + Alert -->
+      <section class="card"
+        style="padding:28px 20px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:0">
+
+        <div
+          style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-family:'Space Grotesk';margin-bottom:16px">
+          Yarınki Tahmin Edilen Şiddet
+        </div>
+
+        <div class="gauge" id="plasma-gauge"
+          style="color:var(--coral);border-color:rgba(248,113,113,.2);margin-bottom:20px">
+          <span id="storm-label"
+            style="font-family:'Space Grotesk';font-weight:900;font-size:1.6rem;line-height:1;text-transform:uppercase">—</span>
+          <div id="storm-divider"
+            style="width:32px;height:2px;border-radius:1px;background:rgba(248,113,113,.35);margin:10px 0"></div>
+          <span id="kp-label" style="font-family:'Space Grotesk';font-weight:700;font-size:1.2rem;opacity:.85">—</span>
+        </div>
+
+        <div class="grid-3" style="width:100%;max-width:480px;margin-bottom:18px">
+          <div class="mini-stat" title="Makine Öğrenimi Modeli Ortalama Doğruluk Puanı">
+            <div
+              style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">
+              Doğruluk</div>
+            <div style="font-family:'Space Grotesk';font-weight:900;font-size:1.5rem;color:var(--green)">%<span
+                id="model-accuracy">--</span></div>
+            <div style="font-size:11px;margin-top:4px;color:rgba(255,255,255,0.4)">Tahmin</div>
+          </div>
+          <div class="mini-stat">
+            <div
+              style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">
+              Anlık Kp</div>
+            <div id="live-kp" style="font-family:'Space Grotesk';font-weight:900;font-size:1.5rem">—</div>
+            <div id="live-G" style="font-size:11px;margin-top:4px;color:var(--green)">—</div>
+          </div>
+          <div class="mini-stat">
+            <div
+              style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">3
+              Gün Maks</div>
+            <div id="max-kp-val" style="font-family:'Space Grotesk';font-weight:900;font-size:1.5rem">—</div>
+            <div id="max-G-val" style="font-size:11px;margin-top:4px;color:var(--coral)">—</div>
+          </div>
+        </div>
+
+        <div class="alert-badge" id="alert-badge"
+          style="color:var(--coral);border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.08);margin-bottom:14px">
+          <span id="alert-pulse"
+            style="width:10px;height:10px;border-radius:50%;background:var(--coral);box-shadow:0 0 10px var(--coral);animation:blink 1s ease-in-out infinite;display:inline-block"></span>
+          <span id="alert-text" style="font-family:'Space Grotesk';font-weight:700;font-size:.9rem">Yükleniyor…</span>
+        </div>
+
+        <p id="storm-desc" style="font-size:.82rem;color:var(--muted);max-width:320px;line-height:1.6">Veriler
+          yükleniyor…</p>
+      </section>
+
+      <!-- 7-Day History Chart -->
+      <section>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px;margin-bottom:12px">
+          <h2 class="stitle">Son 7 Günlük Kp Verisi</h2>
+          <span class="stag">NOAA · Gerçek Veri</span>
+        </div>
+        <div class="card" style="padding:20px 16px 12px">
+          <canvas id="history-chart"></canvas>
+        </div>
+      </section>
+
+      <!-- 3-Day Forecast -->
+      <section>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px;margin-bottom:12px">
+          <h2 class="stitle">3 Günlük Kp Tahmini</h2>
+          <span class="stag">Random Forest · 3h adım</span>
+        </div>
+
+        <div class="grid-3" style="margin-bottom:14px">
+          <div class="day-card" id="forecast-card-1">
+            <div
+              style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:8px">
+              Yarın</div>
+            <div id="forecast-g-1" style="font-family:'Space Grotesk';font-weight:900;font-size:1.5rem">—</div>
+            <div id="forecast-kp-1" style="font-size:11px;font-weight:600;margin-top:4px;opacity:.8">—</div>
+            <div id="forecast-avg-1" style="font-size:9px;margin-top:3px;opacity:.5">ort: —</div>
+          </div>
+          <div class="day-card" id="forecast-card-2">
+            <div
+              style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:8px">
+              2. Gün</div>
+            <div id="forecast-g-2" style="font-family:'Space Grotesk';font-weight:900;font-size:1.5rem">—</div>
+            <div id="forecast-kp-2" style="font-size:11px;font-weight:600;margin-top:4px;opacity:.8">—</div>
+            <div id="forecast-avg-2" style="font-size:9px;margin-top:3px;opacity:.5">ort: —</div>
+          </div>
+          <div class="day-card" id="forecast-card-3">
+            <div
+              style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:8px">
+              3. Gün</div>
+            <div id="forecast-g-3" style="font-family:'Space Grotesk';font-weight:900;font-size:1.5rem">—</div>
+            <div id="forecast-kp-3" style="font-size:11px;font-weight:600;margin-top:4px;opacity:.8">—</div>
+            <div id="forecast-avg-3" style="font-size:9px;margin-top:3px;opacity:.5">ort: —</div>
+          </div>
+        </div>
+
+        <div class="fc-grid">
+          <div class="card" style="padding:16px 14px 10px">
+            <div id="fc-date-1"
+              style="font-size:11px;font-weight:700;color:var(--muted);font-family:'Space Grotesk';margin-bottom:10px">—
+            </div>
+            <canvas id="forecast-chart-1"></canvas>
+          </div>
+          <div class="card" style="padding:16px 14px 10px">
+            <div id="fc-date-2"
+              style="font-size:11px;font-weight:700;color:var(--muted);font-family:'Space Grotesk';margin-bottom:10px">—
+            </div>
+            <canvas id="forecast-chart-2"></canvas>
+          </div>
+          <div class="card" style="padding:16px 14px 10px">
+            <div id="fc-date-3"
+              style="font-size:11px;font-weight:700;color:var(--muted);font-family:'Space Grotesk';margin-bottom:10px">—
+            </div>
+            <canvas id="forecast-chart-3"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Threat Analysis -->
+      <section>
+        <h2 class="stitle" style="padding:0 4px;margin-bottom:12px">Fırtına Etki Analizi</h2>
+        <div class="card" style="overflow:hidden">
+          <div style="padding:20px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;align-items:flex-start;gap:16px">
+              <div class="threat-icon" id="icon-bg-1" style="background:rgba(248,113,113,.1)">
+                <span class="material-symbols-outlined" id="icon-1"
+                  style="color:var(--coral);font-size:20px">electrical_services</span>
+              </div>
+              <div>
+                <h3 style="font-weight:700;font-size:.85rem;margin-bottom:6px">Güç Şebekeleri</h3>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--coral)">Risk:</strong> <span id="threat-desc-1">Yükleniyor…</span></p>
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--green)">Önlem:</strong> <span id="precaution-desc-1">Yükleniyor…</span></p>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:16px">
+              <div class="threat-icon" id="icon-bg-2" style="background:rgba(248,113,113,.1)">
+                <span class="material-symbols-outlined" id="icon-2"
+                  style="color:var(--coral);font-size:20px">satellite_alt</span>
+              </div>
+              <div>
+                <h3 style="font-weight:700;font-size:.85rem;margin-bottom:6px">Uydu Operasyonları</h3>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--coral)">Risk:</strong> <span id="threat-desc-2">Yükleniyor…</span></p>
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--green)">Önlem:</strong> <span id="precaution-desc-2">Yükleniyor…</span></p>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:16px">
+              <div class="threat-icon" id="icon-bg-3" style="background:rgba(248,113,113,.1)">
+                <span class="material-symbols-outlined" id="icon-3"
+                  style="color:var(--coral);font-size:20px">explore</span>
+              </div>
+              <div>
+                <h3 style="font-weight:700;font-size:.85rem;margin-bottom:6px">Navigasyon &amp; Radyo</h3>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--coral)">Risk:</strong> <span id="threat-desc-3">Yükleniyor…</span></p>
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--green)">Önlem:</strong> <span id="precaution-desc-3">Yükleniyor…</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding:14px 20px;text-align:center">
+            <a href="https://www.swpc.noaa.gov/" target="_blank"
+              style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+              Tüm NOAA Detayları <span class="material-symbols-outlined" style="font-size:16px">arrow_forward</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /tab-live -->
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!--  TAB 2 – Simülasyon                                       -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-sim">
+
+      <!-- Slider control -->
+      <section class="card" style="padding:24px 22px">
+        <div style="margin-bottom:18px">
+          <h2 class="stitle" style="margin-bottom:4px">Şiddet Simülasyonu</h2>
+          <p style="font-size:.78rem;color:var(--muted)">Slider'ı hareket ettirerek farklı fırtına senaryolarını
+            inceleyin.</p>
+        </div>
+
+        <!-- G level selector row -->
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+          <span
+            style="font-size:.72rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-family:'Space Grotesk'">Seçili
+            Seviye</span>
+          <span id="sim-slider-label"
+            style="font-size:.82rem;font-weight:700;color:var(--green);font-family:'Space Grotesk'">G1 – Hafif</span>
+        </div>
+
+        <input id="storm-severity" type="range" min="1" max="5" value="1" style="margin-bottom:10px" />
+
+        <!-- G level scale labels -->
+        <div
+          style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);font-weight:600;margin-top:4px">
+          <span>G1</span><span>G2</span><span>G3</span><span>G4</span><span>G5</span>
+        </div>
+
+        <!-- Severity bar -->
+        <div style="margin-top:18px;background:rgba(255,255,255,.05);border-radius:4px;height:8px;overflow:hidden">
+          <div id="sim-sev-bar"
+            style="height:100%;border-radius:4px;width:20%;background:var(--green);transition:width .4s ease,background .4s ease">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:4px">
+          <span>Düşük</span><span>Orta</span><span>Yüksek</span>
+        </div>
+      </section>
+
+      <!-- Sim Hero: gauge + alert -->
+      <section class="card"
+        style="padding:24px 20px;display:flex;flex-direction:column;align-items:center;text-align:center">
+        <div
+          style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-family:'Space Grotesk';margin-bottom:14px">
+          Simüle Edilen Şiddet</div>
+
+        <div class="gauge" id="sim-gauge"
+          style="color:var(--green);border-color:rgba(93,255,160,.2);margin-bottom:18px">
+          <span id="sim-storm-label"
+            style="font-family:'Space Grotesk';font-weight:900;font-size:1.6rem;line-height:1;text-transform:uppercase">G1</span>
+          <div id="sim-divider"
+            style="width:32px;height:2px;border-radius:1px;background:rgba(93,255,160,.35);margin:10px 0"></div>
+          <span id="sim-kp-label" style="font-family:'Space Grotesk';font-weight:700;font-size:1.2rem;opacity:.85">Kp
+            5</span>
+        </div>
+
+        <div class="alert-badge" id="sim-alert-badge"
+          style="color:var(--green);border-color:rgba(93,255,160,.35);background:rgba(93,255,160,.07);margin-bottom:12px">
+          <span id="sim-alert-pulse"
+            style="width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:blink 1s ease-in-out infinite;display:inline-block"></span>
+          <span id="sim-alert-text"
+            style="font-family:'Space Grotesk';font-weight:700;font-size:.9rem;color:var(--green)">Hafif Manyetik
+            Hareketlilik</span>
+        </div>
+
+        <p id="sim-storm-desc" style="font-size:.82rem;color:var(--muted);max-width:320px;line-height:1.6">
+          Yüksek enlemlerde zayıf Aurora ihtimali.
+        </p>
+      </section>
+
+      <!-- Sim threat analysis -->
+      <section>
+        <h2 class="stitle" style="padding:0 4px;margin-bottom:12px">Bu Senaryo İçin Etki Analizi</h2>
+        <div class="card" style="overflow:hidden">
+          <div style="padding:20px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;align-items:flex-start;gap:16px">
+              <div class="threat-icon" id="sim-icon-bg-1" style="background:rgba(93,255,160,.1)">
+                <span class="material-symbols-outlined" id="sim-icon-1"
+                  style="color:var(--green);font-size:20px">electrical_services</span>
+              </div>
+              <div>
+                <h3 style="font-weight:700;font-size:.85rem;margin-bottom:6px">Güç Şebekeleri</h3>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--coral)">Risk:</strong> <span id="sim-threat-1">—</span></p>
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--green)">Önlem:</strong> <span id="sim-precaution-1">—</span></p>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:16px">
+              <div class="threat-icon" id="sim-icon-bg-2" style="background:rgba(93,255,160,.1)">
+                <span class="material-symbols-outlined" id="sim-icon-2"
+                  style="color:var(--green);font-size:20px">satellite_alt</span>
+              </div>
+              <div>
+                <h3 style="font-weight:700;font-size:.85rem;margin-bottom:6px">Uydu Operasyonları</h3>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--coral)">Risk:</strong> <span id="sim-threat-2">—</span></p>
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--green)">Önlem:</strong> <span id="sim-precaution-2">—</span></p>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:16px">
+              <div class="threat-icon" id="sim-icon-bg-3" style="background:rgba(93,255,160,.1)">
+                <span class="material-symbols-outlined" id="sim-icon-3"
+                  style="color:var(--green);font-size:20px">explore</span>
+              </div>
+              <div>
+                <h3 style="font-weight:700;font-size:.85rem;margin-bottom:6px">Navigasyon &amp; Radyo</h3>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--coral)">Risk:</strong> <span id="sim-threat-3">—</span></p>
+                  <p style="font-size:.78rem;color:var(--muted);line-height:1.5"><strong
+                      style="color:var(--green)">Önlem:</strong> <span id="sim-precaution-3">—</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Email Alert Section (Shown on G3+) -->
+      <section id="email-alert-section" class="card"
+        style="padding:24px; margin-top:20px; transition:all 0.4s ease; opacity:0; pointer-events:none; border-color:var(--coral);">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <span class="material-symbols-outlined" style="color:var(--coral); font-size:28px;">warning</span>
+          <h2 class="stitle" style="color:var(--coral); text-transform:uppercase;">Acil Durum Bildirimi</h2>
+        </div>
+        <p style="font-size:0.8rem; color:var(--muted); margin-bottom:16px; line-height:1.5;">Simüle edilen fırtına
+          seviyesi kritik! İlgili birimlere veya kullanıcılara otomatik e-posta uyarısı (simülasyon) gönderebilirsiniz.
+        </p>
+
+        <div style="display:flex; gap:10px;">
+          <input type="email" id="alert-email" placeholder="E-posta adresinizi girin..."
+            style="flex:1; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; color:var(--text); font-family:'Inter', sans-serif; font-size:0.85rem; outline:none;" />
+          <button id="alert-send-btn"
+            style="background:var(--coral); color:#000; border:none; border-radius:10px; padding:0 20px; font-weight:700; font-family:'Space Grotesk', sans-serif; cursor:pointer; transition:all 0.2s; white-space:nowrap;">UYARI
+            GÖNDER</button>
+        </div>
+        <p id="email-status" style="font-size:0.75rem; color:var(--green); margin-top:10px; display:none;"></p>
+      </section>
+
+    </div><!-- /tab-sim -->
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!--  TAB 3 – Bilgi Bankası                                    -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-info">
+
+      <section class="card" style="padding:32px 28px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+          <span class="material-symbols-outlined" style="color:var(--purple); font-size:32px;">public</span>
+          <h2 class="stitle"
+            style="font-size:1.4rem; color:var(--text); text-transform:uppercase; letter-spacing:0.05em;">Uzay Hava
+            Durumu (Space Weather) Nedir?</h2>
+        </div>
+        <p style="color:var(--muted); line-height:1.7; font-size:0.95rem; margin-bottom:16px;">
+          Güneş; devasa kütle atımları (CME), Güneş patlamaları (Solar Flares) ve yüksek hızlı rüzgarları uzay boşluğuna
+          fırlatan oldukça dinamik, manyetik olarak aktif bir yıldızdır.
+          <strong>Uzay Hava Durumu</strong>, bu radyasyon ve yüklü plazma parçacıklarının Dünya'nın manyetosferi ve
+          iyonosferi ile etkileşime girmesi sürecidir.
+          Bu plazmalar Dünya manyetik alanına çarptığında jeomanyetik fırtınalara neden olur.
+        </p>
+        <p style="color:var(--muted); line-height:1.7; font-size:0.95rem;">
+          Modern yaşam büyük ölçüde karmaşık teknolojik sistemlere dayandığı için bu fırtınalar dev boyutlu ekonomik ve
+          lojistik tehlikeler doğurur.
+        </p>
+      </section>
+
+      <div class="grid-2">
+        <!-- KP İndeksi Section -->
+        <section class="card" style="padding:28px 24px; display:flex; flex-direction:column;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+            <span class="material-symbols-outlined" style="color:var(--green); font-size:24px;">bar_chart</span>
+            <h3 class="stitle" style="font-size:1.1rem; color:var(--text);">Planetery K-İndeksi (Kp)</h3>
+          </div>
+          <p style="color:var(--muted); line-height:1.6; font-size:0.85rem; margin-bottom:12px; flex:1;">
+            <strong>Kp İndeksi</strong>, jeomanyetik fırtınaların global düzeydeki ölçeğini logaritmik olarak
+            sınıflandırır. Değerler <strong>0 ile 9</strong> arasında değişir.
+            Dünya etrafındaki seçili gözlemevlerinden gelen manyetometre verilerinin 3 saatlik (3-hourly) periyotlarla
+            ortalaması alınarak hesaplanır.
+          </p>
+          <ul style="color:var(--muted); font-size:0.8rem; line-height:1.6; margin-left:20px; margin-bottom:0;">
+            <li><strong style="color:var(--green)">Kp 0-3:</strong> Sakin seviye, auroralar pürüzsüzdür.</li>
+            <li><strong style="color:var(--yellow)">Kp 4:</strong> Etkileşimde artış, kutup bölgelerinde hareketlilik.
+            </li>
+            <li><strong style="color:var(--coral)">Kp 5-9:</strong> Jeomanyetik Fırtına koşulları. Değer arttıkça
+              manyetik dalgalanmanın logaritmik olarak artması anlamına gelir.</li>
+          </ul>
+        </section>
+
+        <!-- Etki Alanları Section -->
+        <section class="card" style="padding:28px 24px; display:flex; flex-direction:column;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+            <span class="material-symbols-outlined"
+              style="color:var(--orange); font-size:24px;">settings_system_daydream</span>
+            <h3 class="stitle" style="font-size:1.1rem; color:var(--text);">GIC (Jeomanyetik İndüklenen Akımlar)</h3>
+          </div>
+          <p style="color:var(--muted); line-height:1.6; font-size:0.85rem; margin-bottom:12px; flex:1;">
+            Manyetik fırtınaların en tehlikeli yan etkilerinden biri <strong>GIC (Geomagnetically Induced
+              Currents)</strong>'dır.
+            Faraday Yasası gereği, Dünya manyetik alanında meydana gelen ani değişimler, yeryüzünde uzun iletken
+            hatlarda (elektrik şebekeleri, doğalgaz boruları, demiryolları) yönlü, doğrudan akımlar (DC) yaratır.
+          </p>
+          <div
+            style="background:rgba(251,146,60,0.08); border-left:3px solid var(--orange); padding:10px 14px; border-radius:4px;">
+            <p style="color:var(--orange); font-size:0.75rem; font-weight:600; line-height:1.4;">
+              AC akım için tasarlanan yüksek gerilim trafoları, GIC'nin getirdiği güçlü DC akımlara maruz kalınca
+              ısınarak iflas eder veya eriyebilir.
+            </p>
+          </div>
+        </section>
+      </div>
+
+      <section class="card" style="padding:28px 24px; margin-top:20px; overflow-x:auto;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+          <span class="material-symbols-outlined" style="color:var(--red); font-size:24px;">warning</span>
+          <h3 class="stitle" style="font-size:1.1rem; color:var(--text);">G-Scale (Jeomanyetik Fırtına Skalası)</h3>
+        </div>
+        <p style="color:var(--muted); line-height:1.6; font-size:0.85rem; margin-bottom:20px;">
+          NOAA'nın Uzay Hava Durumu Tahmin Merkezi (SWPC), Kp indeksini baz alarak daha pratik anlaşılması için G
+          (Geomagnetic Storm) Skalasını geliştirmiştir. G seviyeleri fırtınanın fiziksel altyapıya etkisini ifade eder.
+        </p>
+
+        <table
+          style="width:100%; border-collapse:collapse; text-align:left; font-size:0.8rem; overflow:hidden; border-radius:12px; border:1px solid var(--border);">
+          <thead style="background:rgba(255,255,255,0.05);">
+            <tr>
+              <th style="padding:14px; border-bottom:1px solid var(--border); color:var(--text);">Seviye</th>
+              <th style="padding:14px; border-bottom:1px solid var(--border); color:var(--muted);">Karşılık Kp</th>
+              <th style="padding:14px; border-bottom:1px solid var(--border); color:var(--muted);">Açıklama</th>
+              <th style="padding:14px; border-bottom:1px solid var(--border); color:var(--muted);">Görünür Olay Sıklığı
+              </th>
+            </tr>
+          </thead>
+          <tbody style="color:var(--muted);">
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:14px; font-weight:700; color:var(--green);">G1 (Minör)</td>
+              <td style="padding:14px;">Kp 5</td>
+              <td style="padding:14px; line-height:1.5;">Şebeke titreşimleri. Göçmen kuşlarda yön sapması. Aurora.</td>
+              <td style="padding:14px;">11 Yıllık Döngüde: ~1700 Kez</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:14px; font-weight:700; color:var(--yellow);">G2 (Orta)</td>
+              <td style="padding:14px;">Kp 6</td>
+              <td style="padding:14px; line-height:1.5;">Uzay araçlarında hafif sürüklenme hataları. High-Freq telsiz
+                sönümlenmeleri.</td>
+              <td style="padding:14px;">11 Yıllık Döngüde: ~600 Kez</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:14px; font-weight:700; color:var(--orange);">G3 (Güçlü)</td>
+              <td style="padding:14px;">Kp 7</td>
+              <td style="padding:14px; line-height:1.5;">Satellit (LEO) yörünge düzeltme ihtiyaçları, GPS hataları
+                başlar.</td>
+              <td style="padding:14px;">11 Yıllık Döngüde: ~200 Kez</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:14px; font-weight:700; color:var(--coral);">G4 (Kritik)</td>
+              <td style="padding:14px;">Kp 8</td>
+              <td style="padding:14px; line-height:1.5;">Volt dengesizliği, GPS hizmetlerinde global çöküş ihtimali,
+                haberleşme kararması.</td>
+              <td style="padding:14px;">11 Yıllık Döngüde: ~100 Kez</td>
+            </tr>
+            <tr>
+              <td style="padding:14px; font-weight:700; color:var(--purple);">G5 (Ekstrem)</td>
+              <td style="padding:14px;">Kp 9</td>
+              <td style="padding:14px; line-height:1.5;">Tam uydu zayiatları, kıtalar arası uzun süreli şebeke
+                yanmaları. Uydularda tam yüzey şarjı.</td>
+              <td style="padding:14px;">11 Yıllık Döngüde: Sadece 4 Kez</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+    </div><!-- /tab-info -->
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!--  TAB 4 – Aurora Ovali                                     -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-aurora">
+      <section class="card"
+        style="padding:28px 24px; text-align:center; display:flex; flex-direction:column; align-items:center;">
+        <div style="margin-bottom:24px;">
+          <h2 class="stitle"
+            style="font-size:1.5rem; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span class="material-symbols-outlined" style="color:var(--green); font-size:28px;">lens_blur</span>
+            Aurora Oval Simülatörü
+          </h2>
+          <p style="font-size:.85rem; color:var(--muted); max-width:400px; line-height:1.5;">
+            Kuzey Kutbu'nun üstten görünümü. Gelişmiş simülasyonda Kp (Güç) seviyesi arttıkça, Aurora Ovalinin ekvatora
+            (dışa doğru) nasıl yayılarak genişlediğini görebilirsiniz.
+          </p>
+        </div>
+
+        <!-- Earth Visualization (Top-Down Pole View) -->
+        <div class="earth-container">
+          <div class="earth-grid"></div>
+          <div class="pole-mark"></div>
+          <div class="aurora-glow" id="aurora-glow"></div>
+          <div class="aurora-ring" id="aurora-ring"></div>
+          <div
+            style="position:absolute; top:20%; left:50%; transform:translateX(-50%); font-size:10px; color:rgba(255,255,255,0.4); font-family:'Space Grotesk';">
+            55° Enlemleri</div>
+          <div
+            style="position:absolute; top:40%; left:50%; transform:translateX(-50%); font-size:10px; color:rgba(255,255,255,0.25); font-family:'Space Grotesk';">
+            70° Enlemleri</div>
+        </div>
+
+        <!-- Controls -->
+        <div style="width:100%; max-width:400px; margin-top:32px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+            <span
+              style="font-size:.75rem; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.08em; font-family:'Space Grotesk'">Kp
+              Değeri</span>
+            <span id="aurora-kp-label"
+              style="font-size:.9rem; font-weight:900; color:var(--green); font-family:'Space Grotesk'">Kp 0 - 3
+              (Sakin)</span>
+          </div>
+          <input id="aurora-slider" type="range" min="0" max="9" value="2" style="margin-bottom:12px;" />
+          <div
+            style="display:flex; justify-content:space-between; font-size:10px; color:var(--muted); font-weight:600;">
+            <span>Kp 0</span><span>Kp 3</span><span>Kp 5</span><span>Kp 7</span><span>Kp 9</span>
+          </div>
+        </div>
+
+        <!-- Impact Text -->
+        <div
+          style="margin-top:24px; background:rgba(255,255,255,0.03); border:1px solid var(--border); padding:16px; border-radius:12px; max-width:400px; width:100%;">
+          <p id="aurora-desc" style="font-size:0.85rem; color:var(--text); line-height:1.6;">
+            Yükleniyor...
+          </p>
+        </div>
+      </section>
+    </div><!-- /tab-aurora -->
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!--  TAB 5 – Güneş Lekeleri                                   -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-sun">
+      <section class="card"
+        style="padding:28px 24px; text-align:center; display:flex; flex-direction:column; align-items:center;">
+        <div style="margin-bottom:24px;">
+          <h2 class="stitle"
+            style="font-size:1.5rem; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span class="material-symbols-outlined" style="color:#ffb300; font-size:28px;">light_mode</span>
+            Güneş Döngüsü &amp; Leke Simülatörü
+          </h2>
+          <p style="font-size:.85rem; color:var(--muted); max-width:400px; line-height:1.5;">
+            Güneşin 11 yıllık aktivite döngüsünü (Solar Cycle) simüle edin. Lekeler (Sunspots) arttıkça şiddetli
+            manyetik fırtınaların ve patlamaların (Solar Flares) Dünya'yı vurma ihtimali artar.
+          </p>
+        </div>
+
+        <!-- Sun Visualization -->
+        <div class="sun-container" id="sun-container">
+          <div class="sun-surface"></div>
+          <!-- Lekeler JavaScript ile üretilecek -->
+        </div>
+
+        <!-- Controls -->
+        <div style="width:100%; max-width:400px; margin-top:32px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+            <span
+              style="font-size:.75rem; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.08em; font-family:'Space Grotesk'">Güneş
+              Aktivitesi</span>
+            <span id="sun-cycle-label"
+              style="font-size:.9rem; font-weight:900; color:#ffb300; font-family:'Space Grotesk'">Minimum
+              (Sakin)</span>
+          </div>
+          <input id="sun-slider" type="range" min="0" max="100" value="0" style="margin-bottom:12px;" />
+          <div
+            style="display:flex; justify-content:space-between; font-size:10px; color:var(--muted); font-weight:600;">
+            <span>Solar Minimum</span><span>Medyan</span><span>Solar Maksimum</span>
+          </div>
+        </div>
+
+        <!-- Impact Text -->
+        <div
+          style="margin-top:24px; background:rgba(255,255,255,0.03); border:1px solid var(--border); padding:16px; border-radius:12px; max-width:400px; width:100%;">
+          <p id="sun-desc" style="font-size:0.85rem; color:var(--text); line-height:1.6;">
+            Yükleniyor...
+          </p>
+        </div>
+      </section>
+    </div><!-- /tab-sun -->
+
+  </main>
+
+  <script>
+    // ── Renk sistemi ──────────────────────────────────────────────────
+    function kpToColor(kp) {
+      if (kp >= 9) return '#a78bfa'; if (kp >= 8) return '#ef4444';
+      if (kp >= 7) return '#f87171'; if (kp >= 6) return '#fb923c';
+      if (kp >= 5) return '#fbbf24'; if (kp >= 3) return '#a3e635';
+      return '#5dffa0';
+    }
+    function kpToSliderVal(kp) { return kp >= 9 ? 5 : kp >= 8 ? 4 : kp >= 7 ? 3 : kp >= 6 ? 2 : 1 }
+
+    // ── Simülasyon verisi ─────────────────────────────────────────────
+    const SD = {
+      1: {
+        lv: 'G1', lb: 'G1 – Hafif', kp: 'Kp 5', kv: 5, c: '#5dffa0', bg: 'rgba(93,255,160,.07)',
+        al: 'Hafif Manyetik Hareketlilik', dc: 'Hafif jeomanyetik aktivite. Çoğu sistem dayanıklıdır ancak çok hassas ekipmanlar etkilenebilir.',
+        th: ['Güç sistemlerinde lokalize ufak gerilim dalgalanmaları (şebeke gürültüsü) yaşanabilir.',
+          'Göçmen hayvanlar için hafif yönelim bozukluğu riski. Uzay araçlarında düşük seviyeli statik etkiler.',
+          'HF (Yüksek Frekans) iletişim sistemlerinde yüksek enlemlerde nadiren küçük zayıflamalar görülebilir.'],
+        pr: ['Şebeke dengeleyicilerinin eşik değerleri kontrol edilmeli, olağan dışı akım çekişleri izlenmelidir.',
+          'Güneş paneli verimliliği izlenmeli, gerekirse hassas görevler bir sonraki yörüngeye ertelenmelidir.',
+          'Havacılık telsizlerinde sinyal gürültüsü (S/N düşüşü) payı bırakılmalı, alternatif kanallar hazır tutulmalıdır.']
+      },
+      2: {
+        lv: 'G2', lb: 'G2 – Orta', kp: 'Kp 6', kv: 6, c: '#fbbf24', bg: 'rgba(251,191,36,.07)',
+        al: 'Orta Şiddetli Fırtına Uyarısı', dc: 'Orta düzey aktivite. Özellikle kuzey ve güney yüksek enlemlerindeki altyapılarda ölçülebilir etkiler başlar.',
+        th: ['Özellikle yüksek enlemlerdeki transformatörlerde ısınma riski ve gerilim kontrol sorunları başlar.',
+          'Uydu gövdelerinde hafif statik elektrik yüklenmeleri ve yörünge verilerinde ufak sapmalar görülebilir.',
+          'Radyo dalgalarında (özellikle gece saatlerinde) zayıflamalar ve GPS sinyallerinde metrik hatalar olabilir.'],
+        pr: ['Transformatör sıcaklıkları telemetri ile yakından takip edilmeli, kapasitör bankları devreye alınmalıdır.',
+          'Uydu manevra hesaplamaları (drag estimation) güncellenmeli ve fazladan düzeltme yakıtı ayrılmalıdır.',
+          'Hassas GPS kullanan tarım veya denizcilik otonom araçları manuel kontrol veya DGPS moduna geçirilmelidir.']
+      },
+      3: {
+        lv: 'G3', lb: 'G3 – Güçlü', kp: 'Kp 7', kv: 7, c: '#fb923c', bg: 'rgba(251,146,60,.07)',
+        al: 'Şiddetli Jeomanyetik Fırtına', dc: 'Geniş çaplı etkiler. Güç şebekelerinde koruyucu eylemler gerektirir. Uydu iletişiminde bozulmalar nettir.',
+        th: ['Şebeke gerilim kontrollerinde zorlanmalar başlar, bazı koruyucu röleler sisteme yanlış alarm verebilir.',
+          'Alçak Dünya Yörüngesi (LEO) uydularında atmosferik sürtünme belirginleşir, ciddi yönelim hataları oluşur.',
+          'Uydu navigasyonlarında konum atlamaları (loss-of-lock) yaşanır; HF radyo iletişimi kutuplarda tamamen kesilebilir.'],
+        pr: ['Bölgesel şebeke operatörleri voltaj regülatörlerini agresif konuma getirmeli, kritik yükleri izole etmelidir.',
+          'Uydulardaki bazı yüksek gerilimli sensörler geçici olarak kapatılmalı (safe-hold), yeni yörünge tahminleri yüklenmelidir.',
+          'Kıtalararası havacılık rotaları kutuplardan daha düşük enlemlere çekilmeli, UHF/VHF iletişim alternatifleri kullanılmalıdır.']
+      },
+      4: {
+        lv: 'G4', lb: 'G4 – Çok Güçlü', kp: 'Kp 8', kv: 8, c: '#f87171', bg: 'rgba(248,113,113,.07)',
+        al: 'Kritik Fırtına Seviyesi', dc: 'Çok şiddetli bölgesel tehlikeler. Teknolojik altyapıda kayıplar yaşanabilir, çok acil önlemler şarttır.',
+        th: ['Yaygın voltaj kararsızlığı nedeniyle şebeke koruma sistemleri hatalı şekilde tüm bölgeleri elektriksiz bırakabilir.',
+          'Uydu yüzeylerinde ağır yüklenme (surface charging), cihaz sıfırlanmaları ve telemetri takiplerinde kopmalar yaşanır.',
+          'Radyo ve navigasyon sistemlerinde saatler süren ağır kesintiler ve geniş çaplı GPS sinyal kararmaları görülür.'],
+        pr: ['Elektrik şebekelerinde jeneratör modlarına geçilmeli, reaktif güç rezervleri maksimum seviyeye çıkarılmalıdır.',
+          'Uydular acil durum \'Güneş Gösterisi (Sun-Point)\' moduna çapraz yedekli kilitlenmeli, bilim enstrümanları tamamen kapatılmalıdır.',
+          'Havacılık ve gemicilikte GPS kullanımına güvenilmemeli, ataletsel seyrüsefer (INS) sistemlerine tam geçiş yapılmalıdır.']
+      },
+      5: {
+        lv: 'G5', lb: 'G5 – Ekstrem', kp: 'Kp 9', kv: 9, c: '#a78bfa', bg: 'rgba(167,139,250,.08)',
+        al: 'EKSTREM JEOMANYETİK FIRTINA!', dc: 'Küresel çapta medeniyet seviyesinde (Carrington olayı benzeri) felaket fırtınası. Tam teknolojik kapanma riski.',
+        th: ['Büyük transformatörlerin iç çekirdeklerinin kalıcı olarak yanması ve kıtaları kapsayan uzun süreli (haftalarca) tam kararmalar.',
+          'Yüzlerce uydunun atmosfer sınırının çökmesiyle yörüngeden sapan uzay çöpüne dönüşmesi, iletişim ağının yok olması.',
+          'Yüksek frekans (HF), VHF ve UHF telsiz sistemlerinin tamamen çökmesi, günlerce süren askeri ve sivil GPS kararması.'],
+        pr: ['Tüm yedek güç (Dizel/Akü) jeneratörleri manuel devreye alınmalı, ana şebeke ile olan tüm fiziksel şalter bağlantıları hemen kesilmelidir.',
+          'Tüm uzay operasyonları iptal edilmeli, derin uzay ve LEO uyduları tümüyle güçsüz \'tam kapalı (power-off)\' izolasyona zorlanmalıdır.',
+          'Elektronik olmayan (analog/mekanik) eski radyo istasyonları devreye sokulmalı, karasal fiber optik veya bakır hatlara geçilmalıdır.']
+      }
+    };
+
+    // ── Tab switching ─────────────────────────────────────────────────
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+      document.getElementById('btn-' + tab).classList.add('active');
+    }
+
+    // ── Chart.js defaults ─────────────────────────────────────────────
+    Chart.defaults.color = '#8990b8';
+    Chart.defaults.font.family = "'Inter',sans-serif";
+    const GR = 'rgba(255,255,255,0.05)';
+
+    let histChart, fcCharts = [null, null, null];
+
+    function makeGrad(ctx, c) {
+      const h = ctx.canvas.parentElement?.clientHeight || 150;
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, c + '55'); g.addColorStop(1, c + '05'); return g;
+    }
+
+    // 7-day line chart
+    function buildHistoryChart(history) {
+      const c = document.getElementById('history-chart').getContext('2d');
+      if (histChart) histChart.destroy();
+      histChart = new Chart(c, {
+        type: 'line',
+        data: {
+          labels: history.map(h => h.time.slice(5, 16).replace('T', ' ')),
+          datasets: [{
+            data: history.map(h => h.kp),
+            borderColor: '#5dffa0', borderWidth: 2,
+            pointRadius: history.map((_, i) => i % 4 === 0 ? 3 : 1),
+            pointBackgroundColor: history.map(h => kpToColor(h.kp)),
+            fill: 'origin', backgroundColor: makeGrad(c, '#5dffa0'), tension: 0.35
+          }]
+        },
+        options: {
+          responsive: true, animation: { duration: 700 },
+          plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0b1228', borderColor: 'rgba(93,255,160,.25)', borderWidth: 1, callbacks: { label: ctx => ` Kp: ${ctx.parsed.y}` } } },
+          scales: {
+            x: { ticks: { maxTicksLimit: 8, maxRotation: 30, font: { size: 10 } }, grid: { color: GR } },
+            y: { min: 0, max: 9, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: GR } }
+          }
+        }
+      });
+    }
+
+    // Per-day bar chart (live forecast or simulation)
+    function buildBarChart(canvasId, series, color, instanceArr, idx) {
+      const c = document.getElementById(canvasId).getContext('2d');
+      if (instanceArr[idx]) instanceArr[idx].destroy();
+      const colors = series.map(kpToColor);
+      instanceArr[idx] = new Chart(c, {
+        type: 'bar',
+        data: {
+          labels: ['03h', '06h', '09h', '12h', '15h', '18h', '21h', '24h'],
+          datasets: [{ data: series, backgroundColor: colors.map(c => c + 'bb'), borderColor: colors, borderWidth: 1, borderRadius: 3 }]
+        },
+        options: {
+          responsive: true, animation: { duration: 500 },
+          plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0b1228', borderColor: color + '44', borderWidth: 1, callbacks: { label: ctx => ` Kp: ${ctx.parsed.y}` } } },
+          scales: {
+            x: { ticks: { font: { size: 9 } }, grid: { color: GR } },
+            y: { min: 0, max: 9, ticks: { stepSize: 3, font: { size: 9 } }, grid: { color: GR } }
+          }
+        }
+      });
+    }
+
+    // ── Simülasyon UI güncellemesi ────────────────────────────────────
+    function updateSimUI(sv) {
+      const d = SD[parseInt(sv)], c = d.c;
+
+      // Slider label + severity bar
+      document.getElementById('sim-slider-label').textContent = d.lb;
+      document.getElementById('sim-slider-label').style.color = c;
+      const barW = parseInt(sv) * 20;
+      document.getElementById('sim-sev-bar').style.width = barW + '%';
+      document.getElementById('sim-sev-bar').style.background = c;
+
+      // Gauge
+      const g = document.getElementById('sim-gauge');
+      g.style.color = c; g.style.borderColor = c + '33';
+      document.getElementById('sim-storm-label').textContent = d.lv;
+      document.getElementById('sim-divider').style.background = c + '44';
+      document.getElementById('sim-kp-label').textContent = d.kp;
+
+      // Alert badge
+      const b = document.getElementById('sim-alert-badge');
+      b.style.color = c; b.style.borderColor = c + '55'; b.style.background = d.bg;
+      document.getElementById('sim-alert-pulse').style.background = c;
+      document.getElementById('sim-alert-pulse').style.boxShadow = `0 0 10px ${c}`;
+      document.getElementById('sim-alert-text').style.color = c;
+      document.getElementById('sim-alert-text').textContent = d.al;
+      document.getElementById('sim-storm-desc').textContent = d.dc;
+
+      // Threats
+      [1, 2, 3].forEach(n => {
+        document.getElementById(`sim-icon-bg-${n}`).style.background = c + '1a';
+        document.getElementById(`sim-icon-${n}`).style.color = c;
+        document.getElementById(`sim-threat-${n}`).textContent = d.th[n - 1];
+        document.getElementById(`sim-precaution-${n}`).textContent = d.pr[n - 1];
+      });
+
+      // Email Alert Display Logic (Show if G >= 3)
+      const emailSec = document.getElementById('email-alert-section');
+      if (parseInt(sv) >= 3) {
+        emailSec.style.opacity = '1';
+        emailSec.style.pointerEvents = 'auto';
+      } else {
+        emailSec.style.opacity = '0';
+        emailSec.style.pointerEvents = 'none';
+        document.getElementById('email-status').style.display = 'none';
+      }
+    }
+
+    // ── Slider event ──────────────────────────────────────────────────
+    const slider = document.getElementById('storm-severity');
+    slider.addEventListener('input', e => updateSimUI(e.target.value));
+
+    // Init sim tab
+    updateSimUI(1);
+
+    // ── E-posta Gönderimi ─────────────────────────────────────────────
+    document.getElementById('alert-send-btn').addEventListener('click', async () => {
+      const email = document.getElementById('alert-email').value;
+      const btn = document.getElementById('alert-send-btn');
+      const status = document.getElementById('email-status');
+
+      if (!email || !email.includes('@')) {
+        status.style.display = 'block';
+        status.style.color = 'var(--coral)';
+        status.textContent = 'Lütfen geçerli bir e-posta adresi girin.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'GÖNDERİLİYOR...';
+
+      try {
+        const res = await fetch('/send-alert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email,
+            level: document.getElementById('sim-storm-label').textContent,
+            desc: document.getElementById('sim-alert-text').textContent
+          })
+        });
+
+        const data = await res.json();
+        status.style.display = 'block';
+        status.style.color = data.success ? 'var(--green)' : 'var(--coral)';
+        status.textContent = data.message;
+        if (data.success) {
+          document.getElementById('alert-email').value = '';
+          setTimeout(() => { status.style.display = 'none'; }, 5000);
+        }
+      } catch (e) {
+        status.style.display = 'block';
+        status.style.color = 'var(--coral)';
+        status.textContent = 'Sunucuya bağlanılamadı.';
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'UYARI GÖNDER';
+    });
+
+    // ── Aurora sekmesi mantığı ────────────────────────────────────────
+    function updateAurora(kp) {
+      const kpVal = parseInt(kp);
+      const ring = document.getElementById('aurora-ring');
+      const glow = document.getElementById('aurora-glow');
+      const label = document.getElementById('aurora-kp-label');
+      const desc = document.getElementById('aurora-desc');
+
+      let color = '#a3e635'; // Default calm
+      let size = 60; // diameter px
+      let ringWidth = 4;
+      let glowOpacity = 0.3;
+      let text = '';
+      let labelText = `Kp ${kpVal} `;
+
+      // Map Kp to visuals
+      if (kpVal <= 3) {
+        color = '#5dffa0'; size = 60; ringWidth = 6; glowOpacity = 0.4;
+        text = "Aurora genellikle sadece kutup dairesi (70° - 80° kuzey) ve çevresinde gözlemlenebilir. İnsan gözüyle ufukta soluk bir yeşil olarak görülebilir.";
+        labelText += "(Sakin)";
+      } else if (kpVal === 4) {
+        color = '#a3e635'; size = 95; ringWidth = 8; glowOpacity = 0.5;
+        text = "Aktif koşullar! Aurora ovali dışa doğru genişliyor. Kanada'nın güney yarısı ve Kuzey Avrupa'nın bazı kısımlarında görünür olabilir.";
+        labelText += "(Aktif)";
+      } else if (kpVal === 5) {
+        color = '#fbbf24'; size = 135; ringWidth = 10; glowOpacity = 0.6;
+        text = "G1 Fırtınası! Aurora ovali oldukça genişledi. Amerika'nın kuzey eyaletlerinden (Michigan, Maine vb.) ufuk çizgisinde görülebilir.";
+        labelText += "(G1 Minör)";
+      } else if (kpVal === 6) {
+        color = '#fb923c'; size = 175; ringWidth = 12; glowOpacity = 0.7;
+        text = "G2 Fırtınası! Aurora daha düşük enlemlere iniyor (Yaklaşık 55° Enlemleri). Orta Avrupa ve Kuzey Amerika kıtalarında açıkça izlenebilir.";
+        labelText += "(G2 Orta)";
+      } else if (kpVal === 7) {
+        color = '#f87171'; size = 215; ringWidth = 16; glowOpacity = 0.8;
+        text = "G3 Güçlü Fırtına! Dinamik ve çok renkli dev aurora bantları! 50° paraleline kadar iner, çok geniş bir nüfus ufukta alev kırmızısı ve mor tonlar olarak görebilir.";
+        labelText += "(G3 Güçlü)";
+      } else if (kpVal >= 8) {
+        color = '#a78bfa'; size = Math.min(250 + (kpVal - 8) * 20, 270); ringWidth = 20; glowOpacity = 0.9;
+        text = kpVal === 8 ? "G4 Şiddetli Fırtına! Aurora ovali Dünya'nın orta enlemlerine kadar (40°-45°) ulaştı. Merkez ve Güney Avrupa ile Türkiye'nin kuzeylerinden ufukta dev kızıl perdeler olarak belirebilir!" :
+          "G5 EKSTREM! Nadir olay (Yüzyılda birkaç kez). Aurora ovali neredeyse tüm ekvatora yayılarak tüm dünyanın gökyüzünü kırmızı auroralara bular.";
+        labelText += (kpVal === 8 ? "(G4 Kritik)" : "(G5 Ekstrem)");
+      }
+
+      ring.style.width = `${size}px`;
+      ring.style.height = `${size}px`;
+      ring.style.borderColor = color;
+      ring.style.borderWidth = `${ringWidth}px`;
+      ring.style.boxShadow = `0 0 ${glowOpacity * 30}px ${color}, inset 0 0 ${glowOpacity * 20}px ${color}`;
+
+      glow.style.width = `${size + 40}px`;
+      glow.style.height = `${size + 40}px`;
+
+      // Custom radial gradient for glow
+      const r = parseInt(color.slice(1, 3), 16) || 0;
+      const g = parseInt(color.slice(3, 5), 16) || 0;
+      const b = parseInt(color.slice(5, 7), 16) || 0;
+      glow.style.background = `radial-gradient(transparent 30%, rgba(${r},${g},${b},${glowOpacity}) 60%, transparent 80%)`;
+
+      label.textContent = labelText;
+      label.style.color = color;
+      desc.textContent = text;
+    }
+
+    document.getElementById('aurora-slider').addEventListener('input', e => updateAurora(e.target.value));
+    updateAurora(2); // init
+
+    // ── Güneş Leke Mantığı ────────────────────────────────────────────
+    const sunContainer = document.getElementById('sun-container');
+    const sunSpots = [];
+    const NUM_SPOTS = 40;
+
+    // Önceden lekeleri oluştur (gizli halde)
+    for (let i = 0; i < NUM_SPOTS; i++) {
+      const spot = document.createElement('div');
+      spot.className = 'sunspot';
+      // rastgele pozisyon, merkez dışına taşmayacak şekilde (r = 130px)
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * 120;
+      const x = Math.cos(angle) * radius + 140;
+      const y = Math.sin(angle) * radius + 140;
+
+      spot.style.left = `${x}px`;
+      spot.style.top = `${y}px`;
+
+      const size = Math.random() * 15 + 5; // 5px to 20px
+      spot.style.width = `${size}px`;
+      spot.style.height = `${size}px`;
+      spot.style.transform = 'translate(-50%, -50%) scale(0)';
+
+      sunContainer.appendChild(spot);
+      sunSpots.push({ el: spot, thresh: Math.random() * 100 });
+    }
+
+    function updateSun(val) {
+      const cycleVal = parseInt(val);
+      const label = document.getElementById('sun-cycle-label');
+      const desc = document.getElementById('sun-desc');
+
+      // Lekeleri göster/gizle
+      sunSpots.forEach(s => {
+        if (cycleVal >= s.thresh) {
+          s.el.style.opacity = '1';
+          s.el.style.transform = 'translate(-50%, -50%) scale(1)';
+        } else {
+          s.el.style.opacity = '0';
+          s.el.style.transform = 'translate(-50%, -50%) scale(0)';
+        }
+      });
+
+      // Metin & Durum güncellemeleri
+      if (cycleVal < 20) {
+        label.textContent = "Solar Minimum (0-20%)";
+        label.style.color = "#5dffa0";
+        desc.textContent = "Güneş yüzeyi son derece pürüzsüz ve sakin. Güneş lekeleri yok denecek kadar az. Kp değerlerinin yükselmesi sürpriz olur.";
+      } else if (cycleVal < 50) {
+        label.textContent = "Aktifleşme Evresi (20-50%)";
+        label.style.color = "#a3e635";
+        desc.textContent = "Yeni bir döngü başladı veya kapanıyor. Ufak güneş lekesi grupları belirmeye başlıyor. Bazen G1-G2 fırtınalarına neden olabilir.";
+      } else if (cycleVal < 80) {
+        label.textContent = "Yüksek Aktivite (50-80%)";
+        label.style.color = "#fb923c";
+        desc.textContent = "Güneş yüzeyi lekelerle dolmaya başladı. Sık sık güneş patlamaları ve Koronal Kütle Atımı (CME) görülür.";
+      } else {
+        label.textContent = "Solar Maksimum (>80%)";
+        label.style.color = "#f87171";
+        desc.textContent = "Güneş Döngüsünün zirvesi! Devasa karışık leke grupları mevcut. En yıkıcı X-Sınıfı patlamaların ve G5 ekstrem fırtınaların tetiklendiği dönem.";
+      }
+    }
+
+    document.getElementById('sun-slider').addEventListener('input', e => updateSun(e.target.value));
+    updateSun(0);
+
+    // ── Canlı sekme: backend fetch ────────────────────────────────────
+    async function loadData() {
+      try {
+        const res = await fetch('/data'); const data = await res.json();
+        if (data.error) { document.getElementById('updated-text').textContent = 'Hata: ' + data.error; return; }
+
+        // Timestamp
+        if (data.generated_at) {
+          const t = new Date(data.generated_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+          document.getElementById('updated-text').textContent = `Son güncelleme: ${t} UTC`;
+        }
+
+        // Anlık Kp
+        document.getElementById('live-kp').textContent = data.current_kp ?? '—';
+        document.getElementById('live-G').textContent = data.current_G ?? '—';
+        document.getElementById('live-G').style.color = kpToColor(data.current_kp || 0);
+        document.getElementById('max-kp-val').textContent = data.max_kp ?? '—';
+        document.getElementById('max-G-val').textContent = data.max_G ?? '—';
+        document.getElementById('max-G-val').style.color = kpToColor(data.max_kp || 0);
+        if (data.accuracy) { document.getElementById('model-accuracy').textContent = data.accuracy; }
+        if (data.accuracy) { document.getElementById('model-accuracy').textContent = data.accuracy; }
+
+        // Gauge (canlı sekme)
+        const col = kpToColor(data.max_kp || 0);
+        const gauge = document.getElementById('plasma-gauge');
+        gauge.style.color = col; gauge.style.borderColor = col + '33';
+        document.getElementById('storm-label').textContent = data.storm_label ?? '—';
+        document.getElementById('storm-divider').style.background = col + '44';
+        document.getElementById('kp-label').textContent = `Kp ${data.max_kp}`;
+
+        // Alert badge
+        const b = document.getElementById('alert-badge');
+        b.style.color = col; b.style.borderColor = col + '55';
+        document.getElementById('alert-pulse').style.background = col;
+        document.getElementById('alert-pulse').style.boxShadow = `0 0 10px ${col}`;
+        document.getElementById('alert-text').textContent = data.alert_text ?? '—';
+        document.getElementById('alert-text').style.color = col;
+        document.getElementById('storm-desc').textContent = data.risk ?? '';
+
+        // Threats (canlı)
+        if (data.threats) {
+          [1, 2, 3].forEach(n => {
+            document.getElementById(`threat-desc-${n}`).textContent = data.threats[n - 1] ?? '—';
+            document.getElementById(`precaution-desc-${n}`).textContent = data.precautions?.[n - 1] ?? '—';
+            document.getElementById(`icon-bg-${n}`).style.background = col + '1a';
+            document.getElementById(`icon-${n}`).style.color = col;
+          });
+        }
+
+        // 7-day history chart
+        if (data.history && data.history.length) buildHistoryChart(data.history);
+
+        // 3-day forecast
+        if (data.forecast_daily && data.forecast_daily.length === 3) {
+          data.forecast_daily.forEach((day, i) => {
+            const idx = i + 1; const dayCol = kpToColor(day.max_kp);
+
+            // Summary card
+            document.getElementById(`forecast-g-${idx}`).textContent = day.G;
+            document.getElementById(`forecast-g-${idx}`).style.color = dayCol;
+            document.getElementById(`forecast-kp-${idx}`).textContent = `maks Kp ${day.max_kp}`;
+            document.getElementById(`forecast-kp-${idx}`).style.color = dayCol;
+            document.getElementById(`forecast-avg-${idx}`).textContent = `ort: ${day.avg_kp}`;
+
+            const card = document.getElementById(`forecast-card-${idx}`);
+            card.style.boxShadow = `inset 0 0 20px ${dayCol}0d`;
+            card.style.borderColor = dayCol + '22';
+
+            // Date label + chart
+            document.getElementById(`fc-date-${idx}`).textContent = `${['Yarın', '2. Gün', '3. Gün'][i]} · ${day.date}`;
+            buildBarChart(`forecast-chart-${idx}`, day.kp_series, dayCol, fcCharts, i);
+          });
+        }
+
+      } catch (e) {
+        console.error(e);
+        document.getElementById('updated-text').textContent = 'Bağlantı hatası.';
+      }
+    }
+
+    loadData();
+    setInterval(loadData, 5 * 60 * 1000);
+  </script>
+</body>
+
+</html>
